@@ -67,7 +67,7 @@ ollama serve          # skip if it already runs as a service
 Clone and install:
 
 ```bash
-git clone https://projecttools.nordicsemi.no/bitbucket/scm/~haku/failure-triage.git
+git clone https://github.com/harish1992/failure_triage.git
 cd failure-triage
 python3 -m venv .venv
 source .venv/bin/activate         # Windows: .venv\Scripts\activate
