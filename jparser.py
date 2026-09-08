@@ -9,7 +9,7 @@ from pathlib import Path
 
 def argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("patterns")
+    parser.add_argument("patterns", nargs = "+", type=Path)
     parser.add_argument('-o', "--output", default="junit-triaged.xml")
     parser.add_argument('-m', "--model", default='granite3.1-dense:8b')
     args = parser.parse_args()
@@ -28,12 +28,12 @@ class AiTriage:
 
     def load(self, patterns, outputfile):
         files = sorted(
-            f for pattern in patterns for f in glob.glob(pattern)
+            f for pattern in patterns for f in Path(pattern.parent).glob(pattern.name)
             if Path(f).suffix == '.xml' and Path(f).name != Path(outputfile).name
         )
         if not files:
             sys.exit(f"no input files matched {patterns}")
-        print(f"merging {len(files)} file(s): {', '.join(files)}")
+        print(f"merging {len(files)} file(s): {[f.name for f in files]}")
         merged = None
         for f in files:
             suite = JUnitXml.fromfile(f, self.parse_func)
