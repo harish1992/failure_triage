@@ -1,11 +1,10 @@
-import sys
 import argparse
 import json
 from jp_ollama import JpAiTool, JpResponseError
-from lxml.etree import XMLParser, parse
-from junitparser import JUnitXml, Failure, Error, Skipped
 from pathlib import Path
 from jp_report import JpHtmlReport
+from junitparser import  Failure, Error, Skipped
+from jp_jxmlparser import JpJunitLoader
 
 def argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -16,29 +15,11 @@ def argparser() -> argparse.Namespace:
     return args
 
 class AiTriage:
-    def __init__(self, input_pattern, output_file, aiInstance):
+    def __init__(self, output_file, aiInstance, file_loader):
         self.cache = {}
-        self.patterns = input_pattern
         self.out = output_file
         self.aiInstance = aiInstance
-
-    def parse_func(self, file_path):
-        xml_parser = XMLParser(huge_tree=True)
-        return parse(file_path, xml_parser)
-
-    def load(self, patterns, outputfile):
-        files = sorted(
-            f for pattern in patterns for f in Path(pattern.parent).glob(pattern.name)
-            if Path(f).suffix == '.xml' and Path(f).name != Path(outputfile).name
-        )
-        if not files:
-            sys.exit(f"no input files matched {patterns}")
-        print(f"merging {len(files)} file(s): {[f.name for f in files]}")
-        merged = None
-        for f in files:
-            suite = JUnitXml.fromfile(f, self.parse_func)
-            merged = suite if merged is None else merged + suite
-        return merged
+        self.file_loader = file_loader
 
     def get_err_string(self, text: str) -> str:
         i = text.rfind("Error")
@@ -74,15 +55,6 @@ class AiTriage:
         self.cache[error_metadata] = (result_array, True) 
         return message
     
-    def parse_test_cases(self, xml):
-        for suite in xml:
-            for case in suite:
-                yield case
-
-    def parse_error_cases(self, xml):
-        for case in self.parse_test_cases(xml):
-            yield from ((case,r) for r in case.result if isinstance(r, (Failure, Error)))
-    
     def cache_init(self, case):
         error_metadata = f"{case.classname}.{case.name}"
         result = "Pass"
@@ -103,11 +75,10 @@ class AiTriage:
     def triage(self):
         all_data = []
         report = JpHtmlReport()
-        xml = self.load(self.patterns, self.out)
-        for case in self.parse_test_cases(xml):
+        for case in self.file_loader.parse_test_cases():
             self.cache_init(case)
         print(self.cache)
-        for case, r in self.parse_error_cases(xml):
+        for case, r in self.file_loader.parse_error_cases():
             desc = self.triage_helper(case, r)
             print(desc)
             all_data.append(json.loads(desc))
@@ -119,5 +90,6 @@ class AiTriage:
 if __name__ == "__main__":
     args = argparser()
     ai_inst = JpAiTool(args.model)
-    triage_failure = AiTriage(args.patterns, args.output, ai_inst)
+    xml_loader = JpJunitLoader(args.patterns)
+    triage_failure = AiTriage(args.output, ai_inst, xml_loader)
     triage_failure.triage()

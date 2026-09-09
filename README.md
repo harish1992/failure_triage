@@ -9,17 +9,18 @@ sent to a third-party API.
 
 ## What it produces
 
-Each failure is annotated in place, below the original traceback:
+Each failure is annotated in a json file and html report is generated:
 
 ```
-tests.test_uart.test_loopback_at_115200
 {
+  "test_case": "tests.test_uart.test_loopback_at_115200", 
   "category": "hardware_or_device_under_test",
   "reason": "firmware",
   "stability": "flaky",
   "confidence": "medium",
   "hypothesis": "The test failed due to a timeout error, indicating that the
                  device under test did not respond within the specified time."
+  "stack_trace": TimeOutError
 }
 ```
 
@@ -77,7 +78,7 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python3 jparser.py "*.xml"
+python3 src/jparser.py "*.xml" -o "filename.json" -m "granite3.1-dense:8b"
 ```
 
 Quote the pattern so the script expands it rather than the shell.
@@ -85,7 +86,7 @@ Quote the pattern so the script expands it rather than the shell.
 | Argument | Default | Meaning |
 |---|---|---|
 | `patterns` | — | Glob pattern(s) for the input JUnit XML |
-| `-o`, `--output` | `junit-triaged.xml` | Where to write the merged, annotated result |
+| `-o`, `--output` | `junit-triaged.json` | Where to write the merged, annotated result |
 | `-m`, `--model` | `granite3.1-dense:8b` | Ollama model tag |
 
 If the requested model is not installed locally, the script says so and falls
