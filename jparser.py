@@ -1,11 +1,11 @@
-import glob
 import sys
 import argparse
-import hashlib
+import json
 from jp_ollama import JpAiTool, JpResponseError
 from lxml.etree import XMLParser, parse
 from junitparser import JUnitXml, Failure, Error, Skipped
 from pathlib import Path
+from jp_report import JpHtmlReport
 
 def argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -47,10 +47,7 @@ class AiTriage:
     def triage_helper(self, case, failure) -> str:
         # find the actual error and create a digest index for cache
         failtext =  (failure.text or failure.message or '').strip()
-        run_count = 0
         ai_read = False
-        #error = self.get_err_string(failtext)
-        #digest = hashlib.sha256(error.encode()).hexdigest()
         error_metadata = f"{case.classname}.{case.name}"
         # skip interpreting if the test is already interpreted
         # that is multiple rerun, this value will never be None
@@ -69,8 +66,13 @@ class AiTriage:
         except JpResponseError as e:
             raise e
         message =  resp['message']['content'].strip() if resp else ""
+        try: 
+            message = json.dumps({"test_case": error_metadata, **json.loads(message), 
+                              "stack_trace": failtext}, indent=4)
+        except:
+            print(f"Message: {message} is not JSON object")
         self.cache[error_metadata] = (result_array, True) 
-        return error_metadata + '\n' + message
+        return message
     
     def parse_test_cases(self, xml):
         for suite in xml:
@@ -83,7 +85,7 @@ class AiTriage:
     
     def cache_init(self, case):
         error_metadata = f"{case.classname}.{case.name}"
-        result = ""
+        result = "Pass"
         for r in case.result:
             if isinstance(r, Failure):
                 result = "Failure"
@@ -91,8 +93,6 @@ class AiTriage:
                 result = "Skip"
             elif isinstance(r, Error):
                 result = "Error"
-        
-        result = "Pass" if result == "" else result 
 
         if self.cache.get(error_metadata) is None:
             self.cache[error_metadata] = ([result] , False) #([result], ai-read)
@@ -101,15 +101,20 @@ class AiTriage:
             self.cache[error_metadata] =  ([*result_array, result], ai_read)
 
     def triage(self):
+        all_data = []
+        report = JpHtmlReport()
         xml = self.load(self.patterns, self.out)
         for case in self.parse_test_cases(xml):
             self.cache_init(case)
         print(self.cache)
         for case, r in self.parse_error_cases(xml):
             desc = self.triage_helper(case, r)
-            r.text = f"{r.text}\n{desc}" if r.text else desc
             print(desc)
-        xml.write(self.out)
+            all_data.append(json.loads(desc))
+        # write to a JSON file
+        with open(self.out, "w") as f:
+            json.dump(all_data, f, indent=4)
+        report.html_report(f"{Path(self.out).stem}.html", json_data=all_data)
 
 if __name__ == "__main__":
     args = argparser()
